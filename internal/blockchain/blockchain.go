@@ -62,7 +62,18 @@ func (bc *Blockchain) NewBlock(prevHash string) Block {
 }
 
 func calcHash(b Block) string {
-	data, _ := json.Marshal(b)
+	blockWithoutHash := struct {
+		Index        int
+		Timestamp    int64
+		Transactions []Transaction
+		PrevHash     string
+	}{
+		Index:        b.Index,
+		Timestamp:    b.Timestamp,
+		Transactions: b.Transactions,
+		PrevHash:     b.PrevHash,
+	}
+	data, _ := json.Marshal(blockWithoutHash)
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
 }
@@ -113,4 +124,20 @@ func (bc *Blockchain) GetTransactionsByAluno(alunoID string) []Transaction {
 		}
 	}
 	return transactions
+}
+
+// ReplaceChain substitui a blockchain atual se a nova for válida e maior
+func (bc *Blockchain) ReplaceChain(newChain []Block) bool {
+	if len(newChain) <= len(bc.Chain) {
+		return false
+	}
+
+	newBC := &Blockchain{Chain: newChain}
+	if !newBC.IsValid() {
+		return false
+	}
+
+	bc.Chain = newChain
+	bc.PendingTransactions = []Transaction{}
+	return true
 }

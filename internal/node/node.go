@@ -7,8 +7,9 @@ const (
 )
 
 type Node struct {
-	ID   string
-	Role string
+	ID    string
+	Role  string
+	Peers []string
 }
 
 func NewNode(id, role string) *Node {
@@ -33,4 +34,3 @@ func (n *Node) CanAddJustifications() bool {
 func (n *Node) CanViewFullChain() bool {
 	return n.Role == RoleProfessor || n.Role == RoleDAE
 }
-

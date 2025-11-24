@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -28,6 +30,7 @@ func (s *Server) Router() http.Handler {
 
 	// comum a todos
 	r.HandleFunc("/chain", s.getChain).Methods("GET")
+	r.HandleFunc("/sync", s.syncChain).Methods("POST")
 
 	// só professor pode registrar presença e minerar
 	if s.Node.Role == node.RoleProfessor {
@@ -127,6 +130,9 @@ func (s *Server) minerarBloco(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Propagar blockchain para todos os peers
+	go s.propagateChain()
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"mensagem":         "Bloco minerado com sucesso",
 		"bloco":            block,
@@ -222,4 +228,60 @@ func extractAlunoIDFromNodeID(nodeID string) string {
 		return nodeID[6:]
 	}
 	return nodeID
+}
+
+// syncChain recebe uma blockchain de outro nó e tenta substituir a local
+func (s *Server) syncChain(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Chain []blockchain.Block `json:"chain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "JSON inválido", http.StatusBadRequest)
+		return
+	}
+
+	if s.Blockchain.ReplaceChain(body.Chain) {
+		log.Printf("✅ [%s] Blockchain atualizada via sync. Novos blocos: %d", s.Node.ID, len(body.Chain))
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"mensagem":      "Blockchain atualizada com sucesso",
+			"novos_blocos":  len(body.Chain),
+			"blocos_locais": len(s.Blockchain.Chain),
+		})
+	} else {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"mensagem":      "Blockchain não atualizada (local é maior ou igual)",
+			"blocos_locais": len(s.Blockchain.Chain),
+		})
+	}
+}
+
+// propagateChain envia a blockchain atual para todos os peers
+func (s *Server) propagateChain() {
+	if len(s.Node.Peers) == 0 {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"chain": s.Blockchain.Chain,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("❌ [%s] Erro ao serializar blockchain: %v", s.Node.ID, err)
+		return
+	}
+
+	for _, peer := range s.Node.Peers {
+		go func(peerURL string) {
+			resp, err := http.Post(peerURL+"/sync", "application/json", bytes.NewBuffer(jsonData))
+			if err != nil {
+				log.Printf("⚠️ [%s] Erro ao propagar para %s: %v", s.Node.ID, peerURL, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				log.Printf("📤 [%s] Blockchain propagada com sucesso para %s", s.Node.ID, peerURL)
+			}
+		}(peer)
+	}
 }

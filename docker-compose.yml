@@ -6,6 +6,7 @@ services:
       - NODE_ID=PROFESSOR-1
       - NODE_ROLE=PROFESSOR
       - PORT=8080
+      - PEERS=http://aluno:8080,http://dae:8080
     ports:
       - "5001:8080"
     networks:
@@ -19,6 +20,7 @@ services:
       - NODE_ID=ALUNO-1
       - NODE_ROLE=ALUNO
       - PORT=8080
+      - PEERS=http://professor:8080,http://dae:8080
     ports:
       - "5002:8080"
     networks:
@@ -32,6 +34,7 @@ services:
       - NODE_ID=DAE-1
       - NODE_ROLE=DAE
       - PORT=8080
+      - PEERS=http://professor:8080,http://aluno:8080
     ports:
       - "5003:8080"
     networks:
