@@ -268,5 +268,5 @@ go build -o node ./cmd/node
 
 ## Licença
 
-Este projeto é para fins educacionais.
+Este projeto é para fins educacionais!
 
