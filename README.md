@@ -429,7 +429,7 @@ Esta bateria demonstra um caso de uso real: um aluno com múltiplos registros de
 - Professor registra várias presenças e faltas para o **Aluno 1**
 - DAE adiciona justificativas para algumas faltas
 - Aluno 1 consulta seu histórico completo
-- Sistema demonstra sincronização e privacidade
+- Sistema demonstra sincronização
 
 ### Pré-requisito
 
