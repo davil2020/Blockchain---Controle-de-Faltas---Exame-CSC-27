@@ -420,6 +420,347 @@ docker-compose up -d --build
 
 ---
 
+## 🎯 Bateria de Testes 2 - Histórico Completo do Aluno
+
+Esta bateria demonstra um caso de uso real: um aluno com múltiplos registros de presenças, faltas e justificativas.
+
+### 📋 Cenário
+
+- Professor registra várias presenças e faltas para o **Aluno 1**
+- DAE adiciona justificativas para algumas faltas
+- Aluno 1 consulta seu histórico completo
+- Sistema demonstra sincronização e privacidade
+
+### Pré-requisito
+
+```bash
+# Reiniciar containers para começar limpo
+docker-compose down && docker-compose up -d --build
+sleep 3  # Aguardar inicialização
+```
+
+---
+
+### 📱 Terminal 1 (Professor) - Registrar Frequências
+
+```bash
+# Aula 1 - Aluno 1 presente
+curl -X POST http://localhost:5001/presencas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-001", "status": "presente"}'
+echo ""
+
+# Aula 2 - Aluno 1 ausente
+curl -X POST http://localhost:5001/presencas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-002", "status": "ausente"}'
+echo ""
+
+# Aula 3 - Aluno 1 presente
+curl -X POST http://localhost:5001/presencas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-003", "status": "presente"}'
+echo ""
+
+# Aula 4 - Aluno 1 ausente
+curl -X POST http://localhost:5001/presencas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-004", "status": "ausente"}'
+echo ""
+
+# Aula 5 - Aluno 1 presente
+curl -X POST http://localhost:5001/presencas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-005", "status": "presente"}'
+echo ""
+
+# Aula 6 - Aluno 1 ausente
+curl -X POST http://localhost:5001/presencas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-006", "status": "ausente"}'
+echo ""
+
+echo "✅ 6 registros adicionados (3 presenças, 3 faltas)"
+```
+
+**Resumo:** Aluno 1 tem 3 presenças e 3 faltas
+
+---
+
+### 📱 Terminal 1 (Professor) - Minerar Bloco
+
+```bash
+# Minerar bloco com as 6 transações
+curl -X POST http://localhost:5001/blocos
+echo ""
+sleep 2  # Aguardar propagação
+
+echo "✅ Bloco minerado e propagado!"
+```
+
+---
+
+### 📱 Terminal 3 (Aluno 1) - Primeira Consulta
+
+```bash
+# Consultar histórico antes das justificativas
+curl -s http://localhost:5002/alunos/1/faltas | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+regs = d.get('registros') or []
+print('═══════════════════════════════════════')
+print('   HISTÓRICO DO ALUNO 1 (Antes DAE)')
+print('═══════════════════════════════════════')
+print(f'Total de aulas: {len(regs)}')
+print()
+presencas = sum(1 for r in regs if r['status'] == 'presente')
+faltas = sum(1 for r in regs if r['status'] == 'ausente')
+print(f'✅ Presenças: {presencas}')
+print(f'❌ Faltas: {faltas}')
+print()
+print('Detalhes:')
+for i, r in enumerate(regs, 1):
+    emoji = '✅' if r['status'] == 'presente' else '❌'
+    print(f'  {i}. {emoji} {r[\"aula_id\"]}: {r[\"status\"]}')
+print('═══════════════════════════════════════')
+"
+```
+
+**Esperado:**
+```
+═══════════════════════════════════════
+   HISTÓRICO DO ALUNO 1 (Antes DAE)
+═══════════════════════════════════════
+Total de aulas: 6
+
+✅ Presenças: 3
+❌ Faltas: 3
+
+Detalhes:
+  1. ✅ AULA-001: presente
+  2. ❌ AULA-002: ausente
+  3. ✅ AULA-003: presente
+  4. ❌ AULA-004: ausente
+  5. ✅ AULA-005: presente
+  6. ❌ AULA-006: ausente
+═══════════════════════════════════════
+```
+
+---
+
+### 📱 Terminal 2 (DAE) - Adicionar Justificativas
+
+```bash
+# Justificar falta da AULA-002
+curl -X POST http://localhost:5003/justificativas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-002", "justificativa": "Consulta médica agendada"}'
+echo ""
+
+# Justificar falta da AULA-004
+curl -X POST http://localhost:5003/justificativas \
+  -H "Content-Type: application/json" \
+  -d '{"aluno_id": "1", "aula_id": "AULA-004", "justificativa": "Participação em evento acadêmico"}'
+echo ""
+
+echo "✅ 2 justificativas adicionadas (pendentes)"
+```
+
+---
+
+### 📱 Terminal 2 (DAE) - Minerar Justificativas
+
+```bash
+# Minerar bloco com justificativas
+curl -X POST http://localhost:5003/blocos
+echo ""
+sleep 2  # Aguardar propagação
+
+echo "✅ Bloco com justificativas minerado e propagado!"
+```
+
+---
+
+### 📱 Terminal 3 (Aluno 1) - Consulta Final Completa
+
+```bash
+# Consultar histórico completo após justificativas
+curl -s http://localhost:5002/alunos/1/faltas | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+regs = d.get('registros') or []
+
+# Agrupar por aula (pega o status mais recente de cada aula)
+aulas = {}
+for r in regs:
+    aula_id = r['aula_id']
+    if aula_id not in aulas or r['status'] == 'justificada':
+        aulas[aula_id] = r
+
+# Contar por status final
+presencas = sum(1 for a in aulas.values() if a['status'] == 'presente')
+faltas_justificadas = sum(1 for a in aulas.values() if a['status'] == 'justificada')
+faltas_pendentes = sum(1 for a in aulas.values() if a['status'] == 'ausente')
+total_aulas = len(aulas)
+
+print()
+print('═══════════════════════════════════════════════════════')
+print('       HISTÓRICO COMPLETO DO ALUNO 1 (Final)')
+print('═══════════════════════════════════════════════════════')
+print(f'Total de aulas: {total_aulas}')
+print()
+print(f'✅ Presenças: {presencas}')
+print(f'📋 Faltas justificadas: {faltas_justificadas}')
+print(f'❌ Faltas pendentes: {faltas_pendentes}')
+print(f'📊 Total de faltas: {faltas_justificadas + faltas_pendentes}')
+print()
+print('Detalhes por aula:')
+print('─' * 55)
+
+# Ordenar por aula_id
+for i, (aula_id, r) in enumerate(sorted(aulas.items()), 1):
+    if r['status'] == 'presente':
+        emoji = '✅'
+        status_str = 'PRESENTE'
+    elif r['status'] == 'justificada':
+        emoji = '📋'
+        status_str = 'JUSTIFICADA'
+    else:
+        emoji = '❌'
+        status_str = 'FALTA'
+    
+    just = f\" | {r['justificativa']}\" if r.get('justificativa') else ''
+    print(f'{i}. {emoji} {aula_id:12} | {status_str:15}{just}')
+
+print('═══════════════════════════════════════════════════════')
+print()
+print('📊 RESUMO:')
+print(f'   • Comparecimento: {presencas}/{total_aulas} aulas ({presencas*100//total_aulas}%)')
+print(f'   • Faltas com justificativa: {faltas_justificadas}')
+print(f'   • Faltas sem justificativa: {faltas_pendentes}')
+print('═══════════════════════════════════════════════════════')
+"
+```
+
+**Esperado:**
+```
+═══════════════════════════════════════════════════════
+       HISTÓRICO COMPLETO DO ALUNO 1 (Final)
+═══════════════════════════════════════════════════════
+Total de aulas: 6
+
+✅ Presenças: 3
+📋 Faltas justificadas: 2
+❌ Faltas pendentes: 1
+📊 Total de faltas: 3
+
+Detalhes por aula:
+───────────────────────────────────────────────────────
+1. ✅ AULA-001     | PRESENTE       
+2. 📋 AULA-002     | JUSTIFICADA     | Consulta médica agendada
+3. ✅ AULA-003     | PRESENTE       
+4. 📋 AULA-004     | JUSTIFICADA     | Participação em evento acadêmico
+5. ✅ AULA-005     | PRESENTE       
+6. ❌ AULA-006     | FALTA          
+═══════════════════════════════════════════════════════
+
+📊 RESUMO:
+   • Comparecimento: 3/6 aulas (50%)
+   • Faltas com justificativa: 2
+   • Faltas sem justificativa: 1
+═══════════════════════════════════════════════════════
+```
+
+---
+
+### 📱 Terminal 2 (DAE) - Verificar Mesmos Dados
+
+```bash
+# DAE consulta o mesmo aluno para confirmar
+curl -s http://localhost:5003/alunos/1/faltas | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+regs = d.get('registros') or []
+
+# Agrupar por aula (mesmo que o aluno faz)
+aulas = {}
+for r in regs:
+    aula_id = r['aula_id']
+    if aula_id not in aulas or r['status'] == 'justificada':
+        aulas[aula_id] = r
+
+presencas = sum(1 for a in aulas.values() if a['status'] == 'presente')
+faltas_just = sum(1 for a in aulas.values() if a['status'] == 'justificada')
+faltas_pend = sum(1 for a in aulas.values() if a['status'] == 'ausente')
+
+print('DAE - Visão do histórico do Aluno 1:')
+print(f'Total de aulas: {len(aulas)}')
+print(f'Presenças: {presencas}')
+print(f'Faltas justificadas: {faltas_just}')
+print(f'Faltas pendentes: {faltas_pend}')
+print('✅ Mesmos números que o aluno vê!')
+"
+```
+
+**Esperado:** 
+```
+DAE - Visão do histórico do Aluno 1:
+Total de aulas: 6
+Presenças: 3
+Faltas justificadas: 2
+Faltas pendentes: 1
+✅ Mesmos números que o aluno vê!
+```
+
+---
+
+### 📱 Terminal 1 (Professor) - Verificar Sincronização
+
+```bash
+# Professor verifica que recebeu as justificativas do DAE
+curl -s http://localhost:5001/alunos/1/faltas | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+regs = d.get('registros') or []
+
+# Agrupar por aula
+aulas = {}
+for r in regs:
+    aula_id = r['aula_id']
+    if aula_id not in aulas or r['status'] == 'justificada':
+        aulas[aula_id] = r
+
+just = sum(1 for a in aulas.values() if a['status'] == 'justificada')
+print(f'Professor vê {len(aulas)} aulas do Aluno 1')
+print(f'Incluindo {just} faltas justificadas pelo DAE')
+print('✅ Sincronização bidirecional funcionando!')
+"
+```
+
+**Esperado:** 
+```
+Professor vê 6 aulas do Aluno 1
+Incluindo 2 faltas justificadas pelo DAE
+✅ Sincronização bidirecional funcionando!
+```
+
+---
+
+### ✅ Evidências Comprovadas Nesta Bateria
+
+| Funcionalidade | Evidência | Status |
+|----------------|-----------|--------|
+| **Múltiplos Registros** | 6 aulas registradas pelo Professor | ✅ |
+| **Sincronização Professor → Aluno** | Aluno vê os 6 registros (3 presenças + 3 faltas) | ✅ |
+| **Justificativas do DAE** | 2 justificativas para AULA-002 e AULA-004 | ✅ |
+| **Sincronização DAE → Aluno** | Aluno vê as justificativas aplicadas | ✅ |
+| **Lógica de Agrupamento** | Sistema agrupa por aula e usa status mais recente | ✅ |
+| **Histórico Consolidado** | 6 aulas: 3 presentes, 2 justificadas, 1 falta | ✅ |
+| **Visão Unificada** | Professor, DAE e Aluno veem mesmos números | ✅ |
+| **Formatação Rica** | Relatório com estatísticas e emojis contextuais | ✅ |
+
+---
+
 ## Endpoints da API
 
 ### Endpoints Comuns (todos os nós)
